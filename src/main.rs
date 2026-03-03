@@ -35,7 +35,7 @@ fn main() -> Result<()> {
     ))?;
 
     let answer = match cli.day {
-        1 => day01::run(&input),
+        1 => day01::run(&input)?,
         _ => unimplemented!(),
     };
 
