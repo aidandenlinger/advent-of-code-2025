@@ -15,7 +15,7 @@ struct Cli {
 
     /// Folder holding input files. "day01.txt" for day 1, "day02.txt" for
     /// day 2, etc.
-    #[arg(default_value = "./input")]
+    #[arg(default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/input"))]
     input_folder: PathBuf,
 }
 
