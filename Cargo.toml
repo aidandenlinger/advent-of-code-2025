@@ -1,0 +1,12 @@
+[package]
+name = "advent-of-code-2025"
+description = "Runner for Advent of Code 2025 problems"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.60", features = ["derive"] }
+color-eyre = "0.6.5"
+
+[profile.dev.package.backtrace]
+opt-level = 3
