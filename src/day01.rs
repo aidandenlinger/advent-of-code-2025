@@ -7,14 +7,16 @@ use nom::multi::separated_list1;
 use nom::sequence::pair;
 use nom::{Finish, IResult, Parser};
 
+use crate::Answer;
+
 /// Run the day 1 puzzle - Secret Entrance
-pub fn run(input: &str) -> Result<i32> {
+pub fn run(input: &str) -> Result<Answer<i32>> {
     const MAX_SAFE_VALUE: i32 = 100;
     const MAGIC_VALUE: i32 = 0;
 
     let rotations = parse(input)?;
 
-    Ok(rotations
+    let part_1 = rotations
         .into_iter()
         .fold((50, 0), |(state, times_at_zero), rotation| {
             let new_state = match rotation {
@@ -30,7 +32,12 @@ pub fn run(input: &str) -> Result<i32> {
 
             (new_state, new_times_at_zero)
         })
-        .1)
+        .1;
+
+    Ok(Answer {
+        part_1,
+        part_2: None,
+    })
 }
 
 /// A rotation per the instructions
@@ -93,6 +100,7 @@ L99
 R14
 L82")
             .expect("valid input")
+            .part_1
         );
     }
 }
