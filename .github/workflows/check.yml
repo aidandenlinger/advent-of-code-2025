@@ -1,0 +1,29 @@
+name: Check
+on: push
+
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      # Required for checkout while this repo is private
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # We will not perform any other git operations in this repo
+          persist-credentials: false
+
+      - name: Configure rust stable
+        run: rustup update stable --no-self-update && rustup default stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+
+      - run: cargo test
