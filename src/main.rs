@@ -5,6 +5,7 @@ use clap::{Parser, value_parser};
 use color_eyre::eyre::{Context, Result};
 
 mod day01;
+mod day02;
 mod test_utils;
 
 #[derive(Parser)]
@@ -38,7 +39,8 @@ fn main() -> Result<()> {
     ))?;
 
     let answer = match cli.day {
-        1 => day01::run(&input)?,
+        1 => day01::run(&input)?.to_string(),
+        2 => day02::run(&input)?.to_string(),
         _ => unimplemented!(),
     };
 
