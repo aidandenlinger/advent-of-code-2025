@@ -7,8 +7,9 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.5.60", features = ["derive"] }
 color-eyre = "0.6.5"
-nom = "8.0.0"
 test-case = "3.3.1"
+winnow = "0.7.15"
 
+# Recommended by color-eyre - https://docs.rs/color-eyre/latest/color_eyre/#improving-perf-on-debug-builds
 [profile.dev.package.backtrace]
 opt-level = 3

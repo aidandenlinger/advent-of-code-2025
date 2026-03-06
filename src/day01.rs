@@ -1,11 +1,10 @@
-use color_eyre::eyre::Result;
-use nom::character::complete::digit1;
-use nom::character::complete::newline;
-use nom::character::one_of;
-use nom::combinator::{all_consuming, map_res};
-use nom::multi::separated_list1;
-use nom::sequence::pair;
-use nom::{Finish, IResult, Parser};
+use color_eyre::eyre::{Result, eyre};
+use winnow::{
+    ascii::{dec_int, newline},
+    combinator::{separated, seq},
+    prelude::*,
+    token::one_of,
+};
 
 use crate::Answer;
 
@@ -115,27 +114,20 @@ enum Rotation {
 
 /// Given the input string, parse it into a list of rotations
 fn parse(input: &str) -> Result<Vec<Rotation>> {
-    Ok(all_consuming(separated_list1(newline, rotation))
+    separated(1.., rotation, newline)
         .parse(input.trim_end())
-        .map_err(<nom::Err<nom::error::Error<&str>>>::to_owned)
-        .finish()?
-        .1)
+        .map_err(|e| eyre!(e.to_string()))
 }
 
 /// Parse a single rotation
-fn rotation(input: &str) -> IResult<&str, Rotation> {
-    pair(one_of("LR"), i32)
+fn rotation(input: &mut &str) -> winnow::Result<Rotation> {
+    seq!(one_of(['L', 'R']), dec_int)
         .map(|(direction, distance)| match direction {
             'L' => Rotation::Left { distance },
             'R' => Rotation::Right { distance },
             _ => unreachable!(),
         })
-        .parse(input)
-}
-
-/// Parse an i32 from a string.
-fn i32(input: &str) -> IResult<&str, i32> {
-    map_res(digit1, str::parse).parse(input)
+        .parse_next(input)
 }
 
 #[cfg(test)]
