@@ -5,6 +5,7 @@ use clap::{Parser, value_parser};
 use color_eyre::eyre::{Context, Result};
 
 mod day01;
+mod test_utils;
 
 #[derive(Parser)]
 #[command(about)]
@@ -21,6 +22,8 @@ struct Cli {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
+    env_logger::init();
+
     let cli = Cli::parse();
 
     let input_file = {
