@@ -6,6 +6,7 @@ use color_eyre::eyre::{Context, Result};
 
 mod day01;
 mod day02;
+mod day03;
 mod test_utils;
 
 #[derive(Parser)]
@@ -41,6 +42,7 @@ fn main() -> Result<()> {
     let answer = match cli.day {
         1 => day01::run(&input)?.to_string(),
         2 => day02::run(&input)?.to_string(),
+        3 => day03::run(&input)?.to_string(),
         _ => unimplemented!(),
     };
 
