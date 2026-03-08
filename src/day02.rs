@@ -174,77 +174,55 @@ mod tests {
         parse(TEST_INPUT).expect("valid parsing");
     }
 
-    #[test]
-    fn part1_invalid_ids() {
+    #[test_case(55)]
+    #[test_case(6464)]
+    #[test_case(123_123)]
+    #[test_case(11)]
+    #[test_case(22)]
+    #[test_case(99)]
+    #[test_case(10_10)]
+    #[allow(clippy::large_digit_groups, reason = "demonstrates the pattern")]
+    #[test_case(11885_11885)]
+    #[test_case(222_222)]
+    #[test_case(446_446)]
+    #[test_case(3859_3859)]
+    fn part1_invalid_ids(invalid_id: u64) {
         enable_logging();
-        let invalid_ids = [
-            55,
-            6464,
-            123_123,
-            11,
-            22,
-            99,
-            10_10,
-            #[allow(clippy::large_digit_groups, reason = "showcases the pattern")]
-            11885_11885,
-            222_222,
-            446_446,
-            3859_3859,
-        ];
-
-        for id in invalid_ids {
-            assert!(part1_invalid_id(id));
-        }
+        assert!(part1_invalid_id(invalid_id));
     }
 
-    #[test]
-    fn part1_valid_ids() {
+    #[test_case(101)]
+    fn part1_valid_ids(valid_id: u64) {
         enable_logging();
-        let valid_ids = [101];
-
-        for id in valid_ids {
-            assert!(!part1_invalid_id(id));
-        }
+        assert!(!part1_invalid_id(valid_id));
     }
 
-    #[test]
-    fn part2_invalid_ids() {
+    #[test_case(1234_1234)]
+    #[test_case(123_123_123)]
+    #[test_case(12_12_12_12_12)]
+    #[test_case(1_111_111)]
+    #[test_case(11)]
+    #[test_case(22)]
+    #[test_case(99)]
+    #[test_case(111)]
+    #[test_case(999)]
+    #[test_case(1010)]
+    #[allow(clippy::large_digit_groups, reason = "demonstrates the pattern")]
+    #[test_case(11885_11885)]
+    #[test_case(222_222)]
+    #[test_case(446_446)]
+    #[test_case(3859_3859)]
+    #[test_case(56_56_56)]
+    #[test_case(824_824_824)]
+    #[test_case(21_21_21_21_21)]
+    fn part2_invalid_ids(invalid_id: u64) {
         enable_logging();
-        let invalid_ids = [
-            1234_1234,
-            123_123_123,
-            12_12_12_12_12,
-            1_111_111,
-            11,
-            22,
-            99,
-            111,
-            999,
-            1010,
-            #[allow(clippy::large_digit_groups, reason = "showcases the pattern")]
-            11885_11885,
-            222_222,
-            446_446,
-            #[allow(clippy::large_digit_groups, reason = "showcases the pattern")]
-            3859_3859,
-            56_56_56,
-            824_824_824,
-            21_21_21_21_21,
-        ];
-
-        for id in invalid_ids {
-            info!("{id}");
-            assert!(part2_invalid_id(id));
-        }
+        assert!(part2_invalid_id(invalid_id));
     }
 
-    #[test]
-    fn part2_valid_ids() {
+    #[test_case(101)]
+    fn part2_valid_ids(valid_id: u64) {
         enable_logging();
-        let valid_ids = [101];
-
-        for id in valid_ids {
-            assert!(!part2_invalid_id(id));
-        }
+        assert!(!part2_invalid_id(valid_id));
     }
 }
