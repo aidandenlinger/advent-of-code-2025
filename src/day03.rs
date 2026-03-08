@@ -13,94 +13,46 @@ pub fn run(input: &str) -> Result<Answer<u64>> {
     let parsed = parse(input)?;
     info!("Parsing successful");
 
-    let part_1 = parsed.iter().map(Bank::joltage_part1).sum::<u32>().into();
-    let part_2 = Some(parsed.iter().map(Bank::joltage_part2).sum());
+    let part_1 = parsed.iter().map(|bank| bank.joltage(Problem::Part1)).sum();
+    let part_2 = Some(parsed.iter().map(|bank| bank.joltage(Problem::Part2)).sum());
 
     Ok(Answer { part_1, part_2 })
 }
 
-impl Display for Bank {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.0.iter().map(ToString::to_string).collect::<String>()
-        )
-    }
-}
+/// A bank of batteries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Bank(Vec<u8>);
 
 impl Bank {
-    /// Returns the joltage of this bank by turning on 2 batteries.
-    fn joltage_part1(&self) -> u32 {
-        // Need at least 2 digits to make a 2 digit number
-        assert!(self.0.len() > 2);
-        trace!("[Part 1] Calculating joltage of {self}");
+    /// Returns the joltage of this bank.
+    fn joltage(&self, batteries_to_turn_on: impl Into<usize>) -> u64 {
+        let batteries_to_turn_on = batteries_to_turn_on.into();
+        // Need enough batteries to turn on x batteries
+        assert!(self.0.len() > batteries_to_turn_on);
 
-        // Find the largest number in the array
-        // (except for the last digit, because
-        // we can't make a two digit number after the last)
-        let (first_digit_index, first_digit) = self
-            .0
-            .split_last()
-            .expect("at least 2 digits in bank")
-            .1
-            .iter()
-            .enumerate()
-            // go through the list *backwards*.
-            // when we get the max through an iterator, we return the *last* maximal item. so to get the leftmost item, consider digits right to left
-            .rev()
-            .max_by_key(|(_index, value)| *value)
-            .expect("at least 2 digits in bank");
-
-        trace!(
-            "Largest number (except for last digit): {first_digit} at index {first_digit_index}"
-        );
-
-        // Now find the second largest number in the array
-        // *after* our largest number
-        let second_digit = self
-            .0
-            .iter()
-            .skip(first_digit_index + 1)
-            .max()
-            .expect("this iterator must have at least one element, we stripped out the last element earlier");
-
-        trace!("Second largest number after index {first_digit_index}: {second_digit}");
-
-        let joltage = u32::from(first_digit * 10 + second_digit);
-        debug!("[Part 1] joltage for {self}: {joltage}");
-        joltage
-    }
-
-    /// Returns the joltage of this bank by turning on 12 batteries.
-    fn joltage_part2(&self) -> u64 {
-        // Need at least 12 digits to make a 12 digit number
-        assert!(self.0.len() > 12);
-
-        trace!("[Part 2] Calculating joltage of {self}");
+        trace!("Calculating joltage of {self} when turning on {batteries_to_turn_on}");
 
         let mut joltage = vec![];
         let mut largest_number_index = None;
 
-        // Find the largest number in the array
-        // (except for the last digit, because
-        // we can't make a two digit number after the last)
-        for index_being_filled in (0..=11).rev() {
+        for index_being_filled in (0..batteries_to_turn_on).rev() {
+            // Consistently find the largest number in the array
+            //   - after the last digit we've used
+            //   - leaving enough digits so we can create a `batteries_to_turn_on` long number
             let (new_index, largest_number) = self
                 .0
                 .iter()
                 .enumerate()
-                // We want the largest number *after* our current largest number
+                // We want the largest number *after* the number we just used
                 .skip(largest_number_index.map(|i| i + 1).unwrap_or_default())
                 // go through the list *backwards*.
-                // when we get the max through an iterator, we return the *last* maximal item. so to get the leftmost item, consider digits right to left
+                // when we get the max through an iterator, we return the *last* maximal item.
+                // so to get the leftmost largest number, consider digits right to left
                 .rev()
-                // If we're filling in the first digit of our joltage,
-                // we need to make sure we ignore the last 11 numbers,
-                // so that we have enough digits to fill in the rest of the joltage
+                // We need to leave enough digits such that we can fill in the rest of the joltage
                 .skip(index_being_filled)
                 .max_by_key(|(_index, value)| *value)
-                .expect("at least 12 digits in bank");
+                .expect("asserted at least `batteries_to_turn_on` digits in bank");
 
             largest_number_index = Some(new_index);
 
@@ -113,7 +65,7 @@ impl Bank {
         }
 
         let joltage = {
-            let (mut result, mut power): (u64, u64) = (0, 1);
+            let (mut result, mut power) = (0, 1);
             for digit in joltage.into_iter().rev() {
                 result += u64::from(*digit) * power;
                 power *= 10;
@@ -121,14 +73,10 @@ impl Bank {
             result
         };
 
-        debug!("joltage for {self}: {joltage}");
+        debug!("joltage for {self} with {batteries_to_turn_on} batteries: {joltage}");
         joltage
     }
 }
-
-/// A bank of batteries.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Bank(Vec<u8>);
 
 /// Parse puzzle input into a series of banks
 fn parse(input: &str) -> Result<Vec<Bank>> {
@@ -154,6 +102,32 @@ fn bank(input: &mut &str) -> winnow::Result<Bank> {
             )
         })
         .parse_next(input)
+}
+
+impl Display for Bank {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.0.iter().map(ToString::to_string).collect::<String>()
+        )
+    }
+}
+
+/// Identifier for which problem we want to calculate the joltage for.
+pub enum Problem {
+    Part1,
+    Part2,
+}
+
+/// Mapping from problem to batteries to turn on.
+impl From<Problem> for usize {
+    fn from(value: Problem) -> Self {
+        match value {
+            Problem::Part1 => 2,
+            Problem::Part2 => 12,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -202,9 +176,9 @@ mod tests {
     #[test_case(&bank(&mut "234234234234278").unwrap(), 78 ; "234234234234278")]
     #[test_case(&bank(&mut "818181911112111").unwrap(), 92 ; "818181911112111")]
     #[test_case(&bank(&mut "9891").unwrap(), 99 ; "use leftmost largest number")]
-    fn part1_joltage(bank: &Bank, expected: u32) {
+    fn part1_joltage(bank: &Bank, expected: u64) {
         enable_logging();
-        assert_eq!(expected, bank.joltage_part1());
+        assert_eq!(expected, bank.joltage(Problem::Part1));
     }
 
     #[test_case(&bank(&mut "987654321111111").unwrap(), 987_654_321_111 ; "987654321111111")]
@@ -213,6 +187,6 @@ mod tests {
     #[test_case(&bank(&mut "818181911112111").unwrap(), 888_911_112_111 ; "818181911112111")]
     fn part2_joltage(bank: &Bank, expected: u64) {
         enable_logging();
-        assert_eq!(expected, bank.joltage_part2());
+        assert_eq!(expected, bank.joltage(Problem::Part2));
     }
 }
