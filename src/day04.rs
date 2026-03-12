@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::Answer;
 use color_eyre::eyre::{Result, eyre};
-use log::debug;
+use log::{debug, trace};
 use winnow::{
     ascii::newline,
     combinator::{repeat, separated},
@@ -12,14 +12,31 @@ use winnow::{
 
 /// Runs Day 04 - Printing Department
 pub fn run(input: &str) -> Result<Answer<usize>> {
-    let grid = parse(input)?;
+    let mut grid = parse(input)?;
 
-    let part_1 = grid.accessible_rolls();
+    let part_1 = grid.accessible_rolls().len();
 
-    Ok(Answer {
-        part_1,
-        part_2: None,
-    })
+    let part_2 = Some({
+        let mut removed_rolls = 0;
+        let mut accessible_rolls = grid.accessible_rolls();
+
+        while !accessible_rolls.is_empty() {
+            debug!("{} rolls are accessible", accessible_rolls.len());
+            removed_rolls += accessible_rolls.len();
+
+            grid = grid.remove(
+                accessible_rolls
+                    .into_iter()
+                    .map(|(_position, row, column)| (row, column))
+                    .collect(),
+            );
+            accessible_rolls = grid.accessible_rolls();
+        }
+
+        removed_rolls
+    });
+
+    Ok(Answer { part_1, part_2 })
 }
 
 /// A grid of rolls of paper and empty positions
@@ -35,6 +52,117 @@ struct Grid {
 enum Position {
     Paper,
     Empty,
+}
+
+impl Grid {
+    /// Return the sum of all accessible rolls on the grid.
+    fn accessible_rolls(&self) -> Vec<(Position, usize, usize)> {
+        self.positions
+            .iter()
+            .enumerate()
+            .flat_map(|(row_index, row)| {
+                row.iter()
+                    .enumerate()
+                    .filter_map(|(column, position)| {
+                        if matches!(position, Position::Paper)
+                            && self
+                                .neighbors(row_index, column)
+                                .into_iter()
+                                .filter(|(position, _, _)| matches!(position, Position::Paper))
+                                .count()
+                                < 4
+                        {
+                            Some((position.clone(), row_index, column))
+                        } else {
+                            None
+                        }
+                    })
+                    .inspect(|(_position, row, column)| trace!("({row}, {column}) is accessible"))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// Get the value of a position at the given coordinates
+    fn get(&self, row: usize, column: usize) -> &Position {
+        self.positions
+            .get(row)
+            .expect("valid index")
+            .get(column)
+            .expect("valid index")
+    }
+
+    /// Given a list of paper, remove those rolls and return a new grid.
+    fn remove(mut self, positions: Vec<(usize, usize)>) -> Self {
+        for (row, column) in positions {
+            assert!(matches!(self.get(row, column), Position::Paper));
+
+            *(self
+                .positions
+                .get_mut(row)
+                .expect("valid index")
+                .get_mut(column)
+                .expect("valid index")) = Position::Empty;
+        }
+
+        self
+    }
+
+    /// Given a coordinate, return all neighbors.
+    fn neighbors(&self, row: usize, column: usize) -> Vec<(Position, usize, usize)> {
+        // There are 8 possible neighbors.
+        // We have to filter out indexes that don't apply to our grid
+        //
+        // Must be enforced by the type, since usize is unsigned:
+        // is x 0? if so, there are no neighbors to the left
+        // is y 0? if so, there are no neighbors above
+        //
+        // Must be enforced by us:
+        // is x self.width? if so there are no neighbors to the right
+        // is y self.width? if so there are no neighbors below
+
+        [
+            (row.checked_sub(1), column.checked_sub(1)),
+            (row.checked_sub(1), Some(column)),
+            (row.checked_sub(1), Some(column + 1)),
+            (Some(row), column.checked_sub(1)),
+            (Some(row), Some(column + 1)),
+            (Some(row + 1), column.checked_sub(1)),
+            (Some(row + 1), Some(column)),
+            (Some(row + 1), Some(column + 1)),
+        ]
+        .into_iter()
+        // Take out neighbors with negative coordinates (too left or above)
+        .filter_map(|(row, column)| Some((row?, column?)))
+        // Take out neighbors that go beyond the grid coordinates (too right or below)
+        .filter(|(row, column)| *row < self.height && *column < self.width)
+        .map(|(row, column)| (self.get(row, column).clone(), row, column))
+        .collect()
+    }
+}
+
+/// Parse rows separated by newlines into a grid
+fn parse(input: &str) -> Result<Grid> {
+    separated(1.., row, newline)
+        .map(|grid: Vec<Vec<Position>>| grid.try_into())
+        .parse(input.trim_end())
+        .map_err(|e| eyre!(e.to_string()))?
+}
+
+/// Parse a row of positions
+fn row(input: &mut &str) -> winnow::Result<Vec<Position>> {
+    repeat(1.., position).parse_next(input)
+}
+
+/// Parse a position character
+fn position(input: &mut &str) -> winnow::Result<Position> {
+    one_of(['@', '.'])
+        .map(|position| match position {
+            '@' => Position::Paper,
+            '.' => Position::Empty,
+            _ => unreachable!(),
+        })
+        .parse_next(input)
 }
 
 impl TryFrom<Vec<Vec<Position>>> for Grid {
@@ -62,98 +190,6 @@ impl TryFrom<Vec<Vec<Position>>> for Grid {
             height,
         })
     }
-}
-
-impl Grid {
-    /// Return the sum of all accessible rolls on the grid.
-    fn accessible_rolls(&self) -> usize {
-        self.positions
-            .iter()
-            .enumerate()
-            .map(|(row_index, row)| {
-                row.iter()
-                    .enumerate()
-                    .filter(|(column, position)| {
-                        matches!(position, Position::Paper)
-                            && self
-                                .neighbors(*column, row_index)
-                                .into_iter()
-                                .filter(|(position, _, _)| matches!(position, Position::Paper))
-                                .count()
-                                < 4
-                    })
-                    .inspect(|(column, _)| debug!("({row_index}, {column}) is accessible"))
-                    .count()
-            })
-            .sum()
-    }
-
-    /// Given a coordinate, return all neighbors.
-    fn neighbors(&self, column: usize, row: usize) -> Vec<(Position, usize, usize)> {
-        // There are 8 possible positions.
-        // We have to filter out impossible options
-        //
-        // Must be enforced by the type, since usize is unsigned:
-        // is x 0? if so, there are no neighbors to the left
-        // is y 0? if so, there are no neighbors above
-        //
-        // Must be enforced by us:
-        // is x self.width? if so there are no neighbors to the right
-        // is y self.width? if so there are no neighbors below
-
-        [
-            (column.checked_sub(1), row.checked_sub(1)),
-            (Some(column), row.checked_sub(1)),
-            (Some(column + 1), row.checked_sub(1)),
-            (column.checked_sub(1), Some(row)),
-            (Some(column + 1), Some(row)),
-            (column.checked_sub(1), Some(row + 1)),
-            (Some(column), Some(row + 1)),
-            (Some(column + 1), Some(row + 1)),
-        ]
-        .into_iter()
-        // Take out neighbors with negative coordinates (too left or above)
-        .filter_map(|(column, row)| Some((column?, row?)))
-        // Take out neighbors that go beyond the grid coordinates (too right or below)
-        .filter(|(column, row)| *column < self.width && *row < self.height)
-        .map(|(column, row)| {
-            (
-                self.positions
-                    .get(row)
-                    .expect("valid index")
-                    .get(column)
-                    .expect("valid_index")
-                    .clone(),
-                column,
-                row,
-            )
-        })
-        .collect()
-    }
-}
-
-/// Parse rows separated by newlines into a grid
-fn parse(input: &str) -> Result<Grid> {
-    separated(1.., row, newline)
-        .map(|grid: Vec<Vec<Position>>| grid.try_into())
-        .parse(input.trim_end())
-        .map_err(|e| eyre!(e.to_string()))?
-}
-
-/// Parse a row of positions
-fn row(input: &mut &str) -> winnow::Result<Vec<Position>> {
-    repeat(1.., position).parse_next(input)
-}
-
-/// Parse a position character
-fn position(input: &mut &str) -> winnow::Result<Position> {
-    one_of(['@', '.'])
-        .map(|position| match position {
-            '@' => Position::Paper,
-            '.' => Position::Empty,
-            _ => unreachable!(),
-        })
-        .parse_next(input)
 }
 
 impl Display for Position {
@@ -205,6 +241,12 @@ mod tests {
     fn part1_example() {
         enable_logging();
         assert_eq!(13, run(EXAMPLE_INPUT).expect("valid input").part_1);
+    }
+
+    #[test]
+    fn part2_example() {
+        enable_logging();
+        assert_eq!(Some(43), run(EXAMPLE_INPUT).expect("valid input").part_2);
     }
 
     #[test]
