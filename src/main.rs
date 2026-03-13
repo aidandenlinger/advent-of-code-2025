@@ -8,6 +8,7 @@ mod day01;
 mod day02;
 mod day03;
 mod day04;
+mod day05;
 mod test_utils;
 
 #[derive(Parser)]
@@ -45,6 +46,7 @@ fn main() -> Result<()> {
         2 => day02::run(&input)?.to_string(),
         3 => day03::run(&input)?.to_string(),
         4 => day04::run(&input)?.to_string(),
+        5 => day05::run(&input)?.to_string(),
         _ => unimplemented!(),
     };
 
