@@ -10,6 +10,13 @@ use winnow::{
     token::one_of,
 };
 
+// Optimization idea:
+// Paper should hold number of neighbors
+// when we remove a roll, subtract 1 from all neighbors
+// then we have the board ready for the next state
+// this caches the `neighbors()` call instead of recalculating it from scratch for each board
+// not necessary since the naive "recalculate it" works very fast, but that's definitely better in principle
+
 /// Runs Day 04 - Printing Department
 pub fn run(input: &str) -> Result<Answer<usize>> {
     let mut grid = parse(input)?;
