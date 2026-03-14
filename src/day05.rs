@@ -1,4 +1,4 @@
-use std::ops::RangeInclusive;
+use std::{cmp::max, collections::VecDeque, ops::RangeInclusive};
 
 use crate::Answer;
 use color_eyre::eyre::{Result, eyre};
@@ -9,14 +9,9 @@ use winnow::{
 };
 
 /// Runs Day 05 - Cafeteria
-pub fn run(input: &str) -> Result<Answer<usize>> {
-    let database = parse(input)?;
+pub fn run(input: &str) -> Result<Answer<u64>> {
+    let database = parse(input)?.optimize_ranges();
 
-    // Optimization I haven't done: we can optimize the ranges.
-    // ie 10-14 and 12-18 can be combined into 10-18
-    // which can then be combined with 16-20 to get 10-20
-    // so the 4 ranges can be optimized to 3-5 and 10-20
-    // **but** the naive approach is quick enough :shrug:
     let part_1 = database
         .available_ids
         .iter()
@@ -26,12 +21,72 @@ pub fn run(input: &str) -> Result<Answer<usize>> {
                 .iter()
                 .any(|range| range.contains(id))
         })
-        .count();
+        .count()
+        .try_into()?;
 
-    Ok(Answer {
-        part_1,
-        part_2: None,
-    })
+    let part_2 = Some(
+        database
+            .fresh_id_ranges
+            .into_iter()
+            .map(|range| range.end() - range.start() + 1)
+            .sum(),
+    );
+
+    Ok(Answer { part_1, part_2 })
+}
+
+impl Database {
+    /// Condense overlapping ranges into the minimal set of ranges.
+    fn optimize_ranges(mut self) -> Self {
+        // Get the ranges in ascending order
+        self.fresh_id_ranges.sort_unstable_by_key(|r| *r.start());
+
+        // Now, we can optimize
+        let mut ranges = self.fresh_id_ranges.into_iter();
+
+        let fresh_id_ranges = match ranges.next() {
+            None => vec![], // case where there were no ranges
+            Some(first_range) => {
+                ranges
+                    .fold(
+                        VecDeque::from([first_range]),
+                        |mut optimized_ranges, current_range| {
+                            let last_range = optimized_ranges
+                                .pop_back()
+                                .expect("this vec to always have at least one element");
+
+                            // Imagine ranges as two horizontal lines.
+                            // Since the ranges are sorted, there
+                            // are two scenarios for current_range's start:
+                            // - current_range's line starts within last_range,
+                            //   meaning we can combine them!
+                            // - current_range's line is further ahead entirely than
+                            //   last_range, in which case they're independent
+                            if last_range.contains(current_range.start()) {
+                                // We can combine them! By definition last_range's
+                                // start is <= current_range's start, we don't know which
+                                // range ends longer
+                                assert!(last_range.start() <= current_range.start());
+                                optimized_ranges.push_back(
+                                    *last_range.start()
+                                        ..=*max(last_range.end(), current_range.end()),
+                                );
+                            } else {
+                                optimized_ranges.extend([last_range, current_range]);
+                            }
+
+                            optimized_ranges
+                        },
+                    )
+                    .into()
+            }
+        };
+
+        Database {
+            fresh_id_ranges,
+            ..self
+        }
+    }
 }
 
 /// An ingredient id
@@ -97,6 +152,12 @@ mod tests {
     }
 
     #[test]
+    fn part2_example() {
+        enable_logging();
+        assert_eq!(Some(14), run(EXAMPLE_INPUT).expect("valid input").part_2);
+    }
+
+    #[test]
     fn parse_example() {
         let parsed = parse(EXAMPLE_INPUT).expect("valid parsing");
         assert_eq!(
@@ -104,5 +165,13 @@ mod tests {
             parsed.fresh_id_ranges.as_slice()
         );
         assert_eq!(&[1, 5, 8, 11, 17, 32], parsed.available_ids.as_slice());
+    }
+
+    #[test]
+    fn optimize_ranges() {
+        let optimized = parse(EXAMPLE_INPUT)
+            .expect("valid parsing")
+            .optimize_ranges();
+        assert_eq!(&[3..=5, 10..=20], optimized.fresh_id_ranges.as_slice());
     }
 }
