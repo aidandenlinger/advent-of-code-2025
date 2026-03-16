@@ -28,7 +28,7 @@ impl Bank {
     fn joltage(&self, batteries_to_turn_on: impl Into<usize>) -> u64 {
         let batteries_to_turn_on = batteries_to_turn_on.into();
         // Need enough batteries to turn on x batteries
-        assert!(self.0.len() > batteries_to_turn_on);
+        debug_assert!(self.0.len() > batteries_to_turn_on);
 
         trace!("Calculating joltage of {self} when turning on {batteries_to_turn_on}");
 

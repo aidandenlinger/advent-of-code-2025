@@ -66,7 +66,7 @@ impl Database {
                                 // We can combine them! By definition last_range's
                                 // start is <= current_range's start, we don't know which
                                 // range ends longer
-                                assert!(last_range.start() <= current_range.start());
+                                debug_assert!(last_range.start() <= current_range.start());
                                 optimized_ranges.push_back(
                                     *last_range.start()
                                         ..=*max(last_range.end(), current_range.end()),
