@@ -12,9 +12,11 @@ use winnow::{
 
 /// Runs Day 6 - Trash Compactor
 pub fn run(input: &str) -> Result<Answer<Number>> {
-    let problem = parse(input)?;
+    let mut problem_part1 = parse_part1(input)?;
+    // Swap our numbers from columns into rows
+    problem_part1.rows = transpose(&problem_part1.rows);
 
-    let part_1 = problem.evaluate();
+    let part_1 = problem_part1.evaluate();
 
     Ok(Answer {
         part_1,
@@ -25,45 +27,52 @@ pub fn run(input: &str) -> Result<Answer<Number>> {
 impl Problem {
     /// Evaluate the problem.
     fn evaluate(&self) -> Number {
-        // Assert there are rows and all rows are the same length
-        debug_assert!(!self.rows.is_empty());
-        debug_assert!(
-            self.rows
-                .iter()
-                .map(Vec::len)
-                .collect::<Vec<_>>()
-                .array_windows()
-                .all(|[len1, len2]| len1 == len2)
-        );
-
-        // Transpose into columns
-        // OPTIMIZATION: instead of saving the entire column and then
-        // collapsing it, we could instead only store the answer.
-        // so for addition columns initalize a 0 value, for multiplication
-        // columns initalize a 1 value, and then instead of pushing values
-        // into a column vector we simply add/multiply the number.
-        let mut columns: Vec<Vec<Number>> = (0..self.rows[0].len())
-            .map(|_| Vec::with_capacity(self.rows.len()))
-            .collect();
-
-        for row in &self.rows {
-            for (column_index, number) in row.iter().enumerate() {
-                columns[column_index].push(*number);
-            }
-        }
-
-        columns
-            .into_iter()
+        self.rows
+            .iter()
             .zip(&self.operations)
             .map(|(column, operation)| {
                 column
-                    .into_iter()
+                    .iter()
                     .fold(operation.identity(), |accumulator, number| {
-                        operation.op(accumulator, number)
+                        operation.op(accumulator, *number)
                     })
             })
             .sum()
     }
+}
+
+/// Exchange rows for columns.
+fn transpose<T: Clone>(input: &[Vec<T>]) -> Vec<Vec<T>> {
+    // Assert all rows are the same length, needed for transpose
+    debug_assert!(
+        input
+            .iter()
+            .map(Vec::len)
+            .collect::<Vec<_>>()
+            .array_windows()
+            .all(|[len1, len2]| len1 == len2)
+    );
+
+    // This is the number of rows from our input - now the number of columns
+    let new_number_of_columns = input.len();
+    // This is the number of columns from our input - now the number of rows
+    let new_number_of_rows = input.first().map(Vec::len).unwrap_or_default();
+
+    let mut transposed: Vec<_> = (0..new_number_of_rows)
+        .map(|_| Vec::with_capacity(new_number_of_columns))
+        .collect();
+
+    for row in input {
+        // new_row is the column the number was in - now it's the row its going in
+        for (new_row, number) in row.iter().enumerate() {
+            transposed
+                .get_mut(new_row)
+                .expect("new_row <= new_number_of_rows")
+                .push(number.clone());
+        }
+    }
+
+    transposed
 }
 
 /// The number type used for this homework.
@@ -86,14 +95,14 @@ enum Operation {
 }
 
 /// Parse input into a Problem struct.
-fn parse(input: &str) -> Result<Problem> {
-    problem
+fn parse_part1(input: &str) -> Result<Problem> {
+    problem_part1
         .parse(input.trim_end())
         .map_err(|e| eyre!(e.to_string()))
 }
 
 /// Parse a problem.
-fn problem(input: &mut &str) -> winnow::Result<Problem> {
+fn problem_part1(input: &mut &str) -> winnow::Result<Problem> {
     seq!(Problem {
         rows: separated(1.., numbers, newline),
         _: (space0, newline),
@@ -118,6 +127,7 @@ fn operations(input: &mut &str) -> winnow::Result<Vec<Operation>> {
     separated(1.., operation, space1).parse_next(input)
 }
 
+/// Parse a single operation.
 fn operation(input: &mut &str) -> winnow::Result<Operation> {
     preceded(
         space0,
@@ -191,7 +201,7 @@ mod tests {
                     .flat_map(Operation::from_str)
                     .collect()
             },
-            parse(EXAMPLE_INPUT).expect("valid input")
+            parse_part1(EXAMPLE_INPUT).expect("valid input")
         );
     }
 }
