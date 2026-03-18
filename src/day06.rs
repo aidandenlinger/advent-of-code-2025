@@ -1,11 +1,12 @@
-use std::str::FromStr;
+use std::{iter::once, str::FromStr};
 
 use color_eyre::eyre::{Result, eyre};
+use log::trace;
 
 use crate::Answer;
 use winnow::{
     ascii::{dec_uint, newline, space0, space1},
-    combinator::{preceded, separated, seq},
+    combinator::{delimited, preceded, separated, seq, terminated},
     prelude::*,
     token::one_of,
 };
@@ -18,10 +19,15 @@ pub fn run(input: &str) -> Result<Answer<Number>> {
 
     let part_1 = problem_part1.evaluate();
 
-    Ok(Answer {
-        part_1,
-        part_2: None,
-    })
+    let problem_part2 = parse_part2(input)?;
+    let part_2 = Some(
+        problem_part2
+            .into_iter()
+            .map(|problem| problem.evaluate())
+            .sum(),
+    );
+
+    Ok(Answer { part_1, part_2 })
 }
 
 impl Problem {
@@ -94,6 +100,24 @@ enum Operation {
     Multiplication,
 }
 
+/// A single problem for part 2
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProblemPart2 {
+    numbers: Vec<Number>,
+    operation: Operation,
+}
+
+impl ProblemPart2 {
+    /// Evaluate the problem to its answer.
+    fn evaluate(&self) -> Number {
+        self.numbers
+            .iter()
+            .fold(self.operation.identity(), |accumulator, number| {
+                self.operation.op(accumulator, *number)
+            })
+    }
+}
+
 /// Parse input into a Problem struct.
 fn parse_part1(input: &str) -> Result<Problem> {
     problem_part1
@@ -114,7 +138,7 @@ fn problem_part1(input: &mut &str) -> winnow::Result<Problem> {
 
 /// Parse a row of numbers.
 fn numbers(input: &mut &str) -> winnow::Result<Vec<Number>> {
-    separated(1.., number, space1).parse_next(input)
+    terminated(separated(1.., number, space1), space0).parse_next(input)
 }
 
 /// Parse a single number.
@@ -138,6 +162,55 @@ fn operation(input: &mut &str) -> winnow::Result<Operation> {
         }),
     )
     .parse_next(input)
+}
+
+/// Parse input into problems from part 2.
+fn parse_part2(input: &str) -> Result<Vec<ProblemPart2>> {
+    let transposed_input: String = transpose(
+        input
+            .lines()
+            .map(|line| line.chars().collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+            .as_slice(),
+    )
+    .into_iter()
+    .map(|chars| chars.into_iter().collect::<String>())
+    .collect::<Vec<_>>()
+    .join("\n");
+
+    trace!("transposed input:\n{transposed_input:?}");
+
+    problems_part2
+        .parse(&transposed_input)
+        .map_err(|e| eyre!(e.to_string()))
+}
+
+/// Parse part 2 input into several problems
+fn problems_part2(input: &mut &str) -> winnow::Result<Vec<ProblemPart2>> {
+    separated(1.., problem_part2, separator_line).parse_next(input)
+}
+
+/// Parse a single problem from part 2 input.
+fn problem_part2(input: &mut &str) -> winnow::Result<ProblemPart2> {
+    let (first_number, operation) =
+        seq!(number_with_spaces, operation, _: newline).parse_next(input)?;
+
+    let rest_of_numbers: Vec<_> = separated(1.., number_with_spaces, newline).parse_next(input)?;
+
+    Ok(ProblemPart2 {
+        numbers: once(first_number).chain(rest_of_numbers).collect(),
+        operation,
+    })
+}
+
+/// Parse a number optionally surrounded by spaces
+fn number_with_spaces(input: &mut &str) -> winnow::Result<Number> {
+    delimited(space0, number, space0).parse_next(input)
+}
+
+/// Read in a line of only spaces and a newline
+fn separator_line(input: &mut &str) -> winnow::Result<()> {
+    delimited(newline, space0, newline).void().parse_next(input)
 }
 
 impl Operation {
@@ -175,8 +248,8 @@ mod tests {
     use super::*;
     use crate::test_utils::enable_logging;
 
-    const EXAMPLE_INPUT: &str = "123 328  51 64
- 45 64  387 23
+    const EXAMPLE_INPUT: &str = "123 328  51 64 
+ 45 64  387 23 
   6 98  215 314
 *   +   *   +  ";
 
@@ -184,6 +257,15 @@ mod tests {
     fn part1_example() {
         enable_logging();
         assert_eq!(4_277_556, run(EXAMPLE_INPUT).expect("valid input").part_1);
+    }
+
+    #[test]
+    fn part2_example() {
+        enable_logging();
+        assert_eq!(
+            Some(3_263_827),
+            run(EXAMPLE_INPUT).expect("valid input").part_2
+        );
     }
 
     #[test]
@@ -202,6 +284,32 @@ mod tests {
                     .collect()
             },
             parse_part1(EXAMPLE_INPUT).expect("valid input")
+        );
+    }
+
+    #[test]
+    fn parse_part2_example() {
+        enable_logging();
+        assert_eq!(
+            vec![
+                ProblemPart2 {
+                    numbers: vec![1, 24, 356],
+                    operation: "*".parse().expect("valid")
+                },
+                ProblemPart2 {
+                    numbers: vec![369, 248, 8],
+                    operation: "+".parse().expect("valid")
+                },
+                ProblemPart2 {
+                    numbers: vec![32, 581, 175],
+                    operation: "*".parse().expect("valid")
+                },
+                ProblemPart2 {
+                    numbers: vec![623, 431, 4],
+                    operation: "+".parse().expect("valid")
+                },
+            ],
+            parse_part2(EXAMPLE_INPUT).expect("valid input")
         );
     }
 }
