@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, marker::PhantomData};
 
 use color_eyre::eyre::{OptionExt, Result, eyre};
 use winnow::{
@@ -22,9 +22,23 @@ pub fn run(input: &str) -> Result<Answer<Number>> {
     })
 }
 
-/// Puzzle input, no beams
+/// A Tachiyon manifold diagram, with `PhantomData` to mark if it's been simulated or not
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Manifold(Vec<Vec<ManifoldItem>>);
+struct Manifold<State: ManifoldState>(Vec<Vec<ManifoldItem>>, PhantomData<State>);
+
+/// Marker trait for the allowed `ManifoldState` types
+trait ManifoldState {}
+
+/// A Manifold diagram that hasn't been simulated yet
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NotSimulated;
+/// A simulated Manifold diagram with a fully drawn beam that prevents resimulation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Simulated;
+
+// Mark them as allowed manifold states
+impl ManifoldState for NotSimulated {}
+impl ManifoldState for Simulated {}
 
 /// Items in the Manifold
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,20 +51,16 @@ enum ManifoldItem {
     Splitter,
 }
 
-/// Diagram with a fully drawn beam.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ManifoldSimulated(Vec<Vec<ManifoldItem>>);
-
 /// Result of simulating a beam.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SimulationResult {
     /// The full manifold diagram after the beam has been split
-    manifold: ManifoldSimulated,
+    manifold: Manifold<Simulated>,
     /// The number of times the beam was split during simulation (for part 1)
     split_count: Number,
 }
 
-impl Manifold {
+impl Manifold<NotSimulated> {
     /// Draw the beam down the manifold, returning the finished diagram
     /// and number of times the beam was split.
     fn simulate(&self) -> Result<SimulationResult> {
@@ -108,16 +118,16 @@ impl Manifold {
         );
 
         Ok(SimulationResult {
-            manifold: ManifoldSimulated(rows),
+            manifold: Manifold(rows, PhantomData),
             split_count,
         })
     }
 }
 
 /// Parse rows separated by newlines into a Tachyon Manifold
-fn parse(input: &str) -> Result<Manifold> {
+fn parse(input: &str) -> Result<Manifold<NotSimulated>> {
     separated(1.., row, newline)
-        .map(Manifold)
+        .map(|manifold| Manifold(manifold, PhantomData))
         .parse(input.trim_end())
         .map_err(|e| eyre!(e.to_string()))
 }
@@ -154,7 +164,7 @@ impl Display for ManifoldItem {
     }
 }
 
-impl Display for Manifold {
+impl<State: ManifoldState> Display for Manifold<State> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -165,12 +175,6 @@ impl Display for Manifold {
                 .collect::<Vec<_>>()
                 .join("\n")
         )
-    }
-}
-
-impl Display for ManifoldSimulated {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Manifold::fmt(&Manifold(self.0.clone()), f)
     }
 }
 
