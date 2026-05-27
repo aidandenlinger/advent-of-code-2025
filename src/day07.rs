@@ -18,7 +18,7 @@ pub fn run(input: &str) -> Result<Answer<Number>> {
 
     Ok(Answer {
         part_1: manifold.simulate()?.split_count,
-        part_2: Some(manifold.quantum_simulate()?.timelines.len().try_into()?),
+        part_2: Some(manifold.quantum_simulate()?.timelines),
     })
 }
 
@@ -63,8 +63,8 @@ struct SimulationResult {
 /// Result of simulating a beam.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct QuantumSimulationResult {
-    /// All timelines the beam could've followed
-    timelines: Vec<Manifold<Simulated>>,
+    /// Count of timelines the beam could've followed
+    timelines: Number,
 }
 
 impl Manifold<NotSimulated> {
@@ -132,18 +132,17 @@ impl Manifold<NotSimulated> {
 
     /// Simulate all timelines for the beam
     fn quantum_simulate(&self) -> Result<QuantumSimulationResult> {
-        let mut timelines: Vec<Manifold<Simulated>> = vec![];
+        let mut timelines = 0;
         // Reverse so we can pop off the back of the vec
         let reversed: Vec<_> = self.0.iter().rev().cloned().collect();
 
         let (first, rest) = reversed.split_last().ok_or_eyre("Empty manifest")?;
 
         // Left is the simulation we're building, right is the rows we haven't considered yet
-        let mut timeline_queue = vec![(vec![first.clone()], Vec::from(rest))];
+        let mut timeline_queue = vec![(first.clone(), Vec::from(rest))];
 
-        while let Some((mut grid_so_far, mut grid_to_go)) = timeline_queue.pop() {
+        while let Some((last_row, mut grid_to_go)) = timeline_queue.pop() {
             let current_row = grid_to_go.pop();
-            let last_row = grid_so_far.last().expect("grid_so_far will never be empty");
 
             if let Some(mut current_row) = current_row {
                 // Doing it this way to panic if we have multiple beams
@@ -170,8 +169,7 @@ impl Manifold<NotSimulated> {
                         // We're just dropping the beam down, continue to next iteration
                         *current_row.get_mut(beam_index).expect("same as value") =
                             ManifoldItem::Beam;
-                        grid_so_far.push(current_row);
-                        timeline_queue.push((grid_so_far, grid_to_go));
+                        timeline_queue.push((current_row, grid_to_go));
                     }
                     ManifoldItem::Splitter => {
                         if beam_index >= 1
@@ -181,25 +179,21 @@ impl Manifold<NotSimulated> {
                             // We'll do cloning here since it's the first branch
                             let mut left_timeline = current_row.clone();
                             left_timeline[beam_index - 1] = ManifoldItem::Beam;
-                            let mut grid_so_far_left = grid_so_far.clone();
-                            grid_so_far_left.push(left_timeline);
-                            timeline_queue.push((grid_so_far_left, grid_to_go.clone()));
+                            timeline_queue.push((left_timeline, grid_to_go.clone()));
                         }
 
                         if let Some(right) = current_row.get_mut(beam_index + 1)
                             && matches!(right, ManifoldItem::Empty)
                         {
                             *right = ManifoldItem::Beam;
-                            grid_so_far.push(current_row);
-                            timeline_queue.push((grid_so_far, grid_to_go));
+                            timeline_queue.push((current_row, grid_to_go));
                         }
                     }
                     ManifoldItem::Beam => unreachable!("Only one beam in quantum simulation"),
                 }
             } else {
-                // This timeline is done if there's no more rows!
-                // Push to final timelines vec and exit
-                timelines.push(Manifold(grid_so_far, PhantomData));
+                // This timeline is done if there's no more rows! Report it and bail
+                timelines += 1;
             }
         }
 
@@ -261,20 +255,6 @@ impl<State: ManifoldState> Display for Manifold<State> {
     }
 }
 
-impl Display for QuantumSimulationResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.timelines
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join("\n\n")
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use log::trace;
@@ -317,8 +297,7 @@ mod tests {
             .expect("valid parsing")
             .quantum_simulate()
             .expect("valid simulation");
-        trace!("\n{answer}");
-        assert_eq!(40, answer.timelines.len());
+        assert_eq!(40, answer.timelines);
     }
 
     #[test]
