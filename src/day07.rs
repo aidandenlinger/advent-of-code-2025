@@ -1,6 +1,7 @@
 use std::{fmt::Display, marker::PhantomData};
 
 use color_eyre::eyre::{OptionExt, Result, eyre};
+use log::trace;
 use winnow::{
     Parser,
     ascii::newline,
@@ -18,7 +19,7 @@ pub fn run(input: &str) -> Result<Answer<Number>> {
 
     Ok(Answer {
         part_1: manifold.simulate()?.split_count,
-        part_2: Some(manifold.quantum_simulate()?.timelines),
+        part_2: Some(manifold.quantum_simulate()?),
     })
 }
 
@@ -58,13 +59,6 @@ struct SimulationResult {
     manifold: Manifold<Simulated>,
     /// The number of times the beam was split during simulation (for part 1)
     split_count: Number,
-}
-
-/// Result of simulating a beam.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct QuantumSimulationResult {
-    /// Count of timelines the beam could've followed
-    timelines: Number,
 }
 
 impl Manifold<NotSimulated> {
@@ -130,74 +124,93 @@ impl Manifold<NotSimulated> {
         })
     }
 
-    /// Simulate all timelines for the beam
-    fn quantum_simulate(&self) -> Result<QuantumSimulationResult> {
-        let mut timelines = 0;
-        // Reverse so we can pop off the back of the vec
-        let reversed: Vec<_> = self.0.iter().rev().cloned().collect();
+    /// Return number of timelines for the beam
+    fn quantum_simulate(&self) -> Result<Number> {
+        let rows = self.0.len();
+        let first_row = self.0.first().ok_or_eyre("Empty manifest")?;
+        let cols = first_row.len();
 
-        let (first, rest) = reversed.split_last().ok_or_eyre("Empty manifest")?;
+        let mut memo = vec![vec![None; cols]; rows];
 
-        // Left is the simulation we're building, right is the rows we haven't considered yet
-        let mut timeline_queue = vec![(first.clone(), Vec::from(rest))];
+        let start = match first_row
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| match item {
+                ManifoldItem::Beam => Some(index),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .as_slice()
+        {
+            [beam_index] => *beam_index,
+            _ => unreachable!("Only one beam in quantum simulation"),
+        };
 
-        while let Some((last_row, mut grid_to_go)) = timeline_queue.pop() {
-            let current_row = grid_to_go.pop();
+        Ok(self.quantum_solver(0, start, &mut memo))
+    }
 
-            if let Some(mut current_row) = current_row {
-                // Doing it this way to panic if we have multiple beams
-                let beam_index = match last_row
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, item)| match item {
-                        ManifoldItem::Beam => Some(index),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .as_slice()
-                {
-                    [beam_index] => *beam_index,
-                    _ => unreachable!("Only one beam in quantum simulation"),
-                };
+    /// Given a row and column of a beam, return how many timelines are reachable from
+    /// this point.
+    fn quantum_solver(
+        &self,
+        row: usize,
+        col: usize,
+        memo: &mut Vec<Vec<Option<Number>>>,
+    ) -> Number {
+        let cache_slot = memo
+            .get(row)
+            .expect("valid row")
+            .get(col)
+            .expect("valid col");
 
-                let value = current_row
-                    .get(beam_index)
-                    .expect("Valid index from last row");
-
-                match value {
-                    ManifoldItem::Empty => {
-                        // We're just dropping the beam down, continue to next iteration
-                        *current_row.get_mut(beam_index).expect("same as value") =
-                            ManifoldItem::Beam;
-                        timeline_queue.push((current_row, grid_to_go));
-                    }
-                    ManifoldItem::Splitter => {
-                        if beam_index >= 1
-                            && let Some(left) = current_row.get(beam_index - 1)
-                            && matches!(left, ManifoldItem::Empty)
-                        {
-                            // We'll do cloning here since it's the first branch
-                            let mut left_timeline = current_row.clone();
-                            left_timeline[beam_index - 1] = ManifoldItem::Beam;
-                            timeline_queue.push((left_timeline, grid_to_go.clone()));
-                        }
-
-                        if let Some(right) = current_row.get_mut(beam_index + 1)
-                            && matches!(right, ManifoldItem::Empty)
-                        {
-                            *right = ManifoldItem::Beam;
-                            timeline_queue.push((current_row, grid_to_go));
-                        }
-                    }
-                    ManifoldItem::Beam => unreachable!("Only one beam in quantum simulation"),
-                }
-            } else {
-                // This timeline is done if there's no more rows! Report it and bail
-                timelines += 1;
-            }
+        // First - have we already found the number of timelines from this position?
+        if let Some(timelines) = cache_slot {
+            return *timelines;
         }
 
-        Ok(QuantumSimulationResult { timelines })
+        // Second - are we basecase? In this case, that means we're the last row
+        if row == memo.len() - 1 {
+            // There is only one exit from the grid on the last row, going straight down
+            return 1;
+        }
+
+        // Finally, we need to determine how many timelines are reachable from this point.
+        // Determine what's on the next row.
+        trace!("Checking row: {row} col: {col}");
+        let next_row = self.0.get(row + 1).expect("We checked row boundaries");
+        let slot_below = next_row.get(col).expect("valid column");
+
+        let timelines_reachable = match slot_below {
+            ManifoldItem::Empty => {
+                // We're just dropping the beam down, continue to next iteration
+                self.quantum_solver(row + 1, col, memo)
+            }
+            ManifoldItem::Splitter => {
+                // We're splitting here. Calculate left and right and sum up
+                let mut timelines_reachable = 0;
+
+                if col >= 1
+                    && let Some(left) = next_row.get(col - 1)
+                    && matches!(left, ManifoldItem::Empty)
+                {
+                    timelines_reachable += self.quantum_solver(row + 1, col - 1, memo);
+                }
+
+                if let Some(right) = next_row.get(col + 1)
+                    && matches!(right, ManifoldItem::Empty)
+                {
+                    timelines_reachable += self.quantum_solver(row + 1, col + 1, memo);
+                }
+
+                timelines_reachable
+            }
+            ManifoldItem::Beam => {
+                unreachable!("Only one beam in quantum simulation");
+            }
+        };
+
+        memo[row][col] = Some(timelines_reachable);
+        timelines_reachable
     }
 }
 
@@ -297,7 +310,7 @@ mod tests {
             .expect("valid parsing")
             .quantum_simulate()
             .expect("valid simulation");
-        assert_eq!(40, answer.timelines);
+        assert_eq!(40, answer);
     }
 
     #[test]
