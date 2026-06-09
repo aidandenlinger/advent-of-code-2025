@@ -41,14 +41,26 @@
               "rust-analyzer"
             ];
           };
+
+          # Disable unwanted hardening flags that can cause unexpected behavor
+          # https://github.com/NixOS/nixpkgs/issues/18995#issuecomment-4061380978
+          mkShellNoHardening =
+            args:
+            pkgs.mkShell (
+              {
+                hardeningDisable = [ "all" ];
+                NIX_ENFORCE_NO_NATIVE = false;
+              }
+              // args
+            );
         in
         {
           devShells = {
-            default = pkgs.mkShell {
+            default = mkShellNoHardening {
               buildInputs = [ rustDev ];
             };
 
-            ci = pkgs.mkShell {
+            ci = mkShellNoHardening {
               buildInputs = [ rustMinimal ];
             };
           };
