@@ -33,7 +33,9 @@
             inherit system overlays;
           };
 
-          rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+          rustMinimal = pkgs.rust-bin.stable.latest.default;
+
+          rustDev = rustMinimal.override {
             extensions = [
               "rust-src"
               "rust-analyzer"
@@ -41,10 +43,14 @@
           };
         in
         {
-          devShells.default = pkgs.mkShell {
-            buildInputs = [
-              rustToolchain
-            ];
+          devShells = {
+            default = pkgs.mkShell {
+              buildInputs = [ rustDev ];
+            };
+
+            ci = pkgs.mkShell {
+              buildInputs = [ rustMinimal ];
+            };
           };
         };
     };

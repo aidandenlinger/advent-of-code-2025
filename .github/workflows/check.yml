@@ -26,11 +26,11 @@ jobs:
       - name: Cache Nix Store
         uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
         with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/flake.lock') }}
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
-      - shell: nix develop .#default --command bash -e {0}
-        run: cargo test
+      - name: Run tests
+        run: nix develop .#ci --command cargo test
