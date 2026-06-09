@@ -33,9 +33,9 @@
             inherit system overlays;
           };
 
-          rustMinimal = pkgs.rust-bin.stable.latest.default;
+          rustMinimal = pkgs.rust-bin.stable.latest.minimal;
 
-          rustDev = rustMinimal.override {
+          rustDev = pkgs.rust-bin.stable.latest.default.override {
             extensions = [
               "rust-src"
               "rust-analyzer"
