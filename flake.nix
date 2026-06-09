@@ -57,11 +57,11 @@
         {
           devShells = {
             default = mkShellNoHardening {
-              buildInputs = [ rustDev ];
+              nativeBuildInputs = [ rustDev ];
             };
 
             ci = mkShellNoHardening {
-              buildInputs = [ rustMinimal ];
+              nativeBuildInputs = [ rustMinimal ];
             };
           };
         };
