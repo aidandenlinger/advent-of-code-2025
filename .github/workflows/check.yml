@@ -20,10 +20,17 @@ jobs:
           # We will not perform any other git operations in this repo
           persist-credentials: false
 
-      - name: Configure rust stable
-        run: rustup update stable --no-self-update && rustup default stable
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+
+      - name: Cache Nix Store
+        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
-      - run: cargo test
+      - shell: nix develop .#default --command bash -e {0}
+        run: cargo test
