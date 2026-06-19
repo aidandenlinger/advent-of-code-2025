@@ -28,7 +28,7 @@
       perSystem =
         { system, ... }:
         let
-          overlays = [ (import rust-overlay) ];
+          overlays = [ rust-overlay.overlays.default ];
           pkgs = import nixpkgs {
             inherit system overlays;
           };
@@ -57,11 +57,11 @@
         {
           devShells = {
             default = mkShellNoHardening {
-              nativeBuildInputs = [ rustDev ];
+              packages = [ rustDev ];
             };
 
             ci = mkShellNoHardening {
-              nativeBuildInputs = [ rustMinimal ];
+              packages = [ rustMinimal ];
             };
           };
         };
