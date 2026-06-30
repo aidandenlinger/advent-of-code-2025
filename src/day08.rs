@@ -1,25 +1,33 @@
-use std::{cmp::Reverse, collections::BinaryHeap};
+use std::{
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap},
+};
 
 use crate::Answer;
-use color_eyre::eyre::{eyre, Result};
+use color_eyre::eyre::{Result, eyre};
 use winnow::{
+    Parser,
     ascii::{dec_uint, newline},
     combinator::{separated, seq},
-    Parser,
 };
 
 /// Number type for the answer
-type Number = u64;
+type Number = usize;
 
 pub fn run(input: &str) -> Result<Answer<Number>> {
     let points = parse(input)?;
     let connections = connections_to_make(&points, 1000);
+    let roster = GroupRoster::new(&connections);
+    let group_counts = roster.largest_groups(3);
 
-    todo!()
+    Ok(Answer {
+        part_1: group_counts.into_iter().fold(1, usize::strict_mul),
+        part_2: None,
+    })
 }
 
 /// A point in 3D space.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Point {
     x: Number,
     y: Number,
@@ -55,15 +63,10 @@ impl Point {
     }
 }
 
-fn part1_answer() {
-    // THOUGHT: we don't need to store the groups of 1, we only need to store groups of
-    // 2 or more. if we don't get enough groups, we know the other ones are of size 1
-}
-
 /// Find the `num_of_connections` closest pairs of points.
 fn connections_to_make(points: &[Point], num_of_connections: usize) -> Vec<(Point, Point)> {
     // A *min-heap* that stores Reverse<Distance>: we want the **smallest** distances
-    // Optimization: don't store all distances, only store num_of_connections distances.
+    // Future optimization if needed: don't store all distances, only store num_of_connections distances.
     // going naive for now and storing all distances, if needed we can optimize
     let mut heap = BinaryHeap::new();
 
@@ -98,6 +101,62 @@ impl Ord for Distance<'_> {
 impl PartialOrd for Distance<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+/// Data structure to hold points together into groups.
+struct GroupRoster(HashMap<Point, GroupId>);
+
+/// Implementation detail for [`GroupRoster`], identifying a group.
+type GroupId = u16;
+
+impl GroupRoster {
+    /// Construct the roster from a list of points to connect.
+    fn new(connections: &[(Point, Point)]) -> Self {
+        // Maps Point -> GroupId
+        let mut map = HashMap::new();
+        let mut unclaimed_group_id: GroupId = 1;
+
+        for (p1, p2) in connections {
+            for point in [p1, p2] {
+                if !map.contains_key(point) {
+                    map.insert(point.clone(), unclaimed_group_id);
+                    unclaimed_group_id += 1;
+                }
+            }
+
+            let p1_group = *map.get(p1).expect("We asserted entry above");
+            let p2_group = *map.get(p2).expect("We asserted entry above");
+
+            // Merge p2's group into p1 by changing all entries pointing to p2 to be p1
+            for group_id in map.values_mut().filter(|group_id| **group_id == p2_group) {
+                *group_id = p1_group;
+            }
+        }
+
+        Self(map)
+    }
+
+    /// Return the size of the `number` largest groups.
+    fn largest_groups(&self, number: usize) -> Vec<usize> {
+        let mut counts = HashMap::new();
+
+        for group in self.0.values() {
+            let count = counts.entry(group).or_default();
+            *count += 1;
+        }
+
+        let mut heap = counts.values().collect::<BinaryHeap<_>>();
+
+        let mut answer = Vec::with_capacity(number);
+
+        for _ in 0..number {
+            // NOTE: if we don't have enough groups, the remainer are of size 1
+            // because they'd be standalone points
+            answer.push(*heap.pop().unwrap_or(&1));
+        }
+
+        answer
     }
 }
 
@@ -148,8 +207,20 @@ mod tests {
 107_662 ; "simple case 1")]
     // Node: Math.pow(52-117, 2)+ Math.pow(470-168, 2) + Math.pow(668-530, 2)
     #[test_case(&Point { x: 52, y: 470, z: 668 }, &Point { x: 117, y: 168, z: 530 },   114_473 ; "simple case 2")]
-    fn distance_squared(p1: &Point, p2: &Point, expected_distance: u64) {
+    fn distance_squared(p1: &Point, p2: &Point, expected_distance: Number) {
         assert_eq!(expected_distance, p1.distance_squared(p2));
+    }
+
+    #[test]
+    fn circuit_sizes() {
+        enable_logging();
+        let points = parse(EXAMPLE_INPUT).expect("valid parsing");
+        let connections = connections_to_make(&points, 10);
+
+        let roster = GroupRoster::new(&connections);
+        let group_counts = roster.largest_groups(3);
+        assert_eq!(&[5, 4, 2], group_counts.as_slice());
+        assert_eq!(40, group_counts.into_iter().fold(1, usize::strict_mul));
     }
 
     #[test]
