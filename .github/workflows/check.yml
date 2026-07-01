@@ -1,4 +1,4 @@
-name: Run tests
+name: CI
 on: push
 
 permissions: {}
@@ -7,7 +7,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
+  ci:
     runs-on: ubuntu-latest
     permissions:
       # Required for checkout while this repo is private
@@ -31,6 +31,12 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      - name: Format
+        run: nix develop .#ci --command cargo fmt --check
+
+      - name: Lint
+        run: nix develop .#ci --command cargo clippy -- --warn clippy::pedantic
 
       - name: Run tests
         run: nix develop .#ci --command cargo test

@@ -33,7 +33,7 @@
             inherit system overlays;
           };
 
-          rustMinimal = pkgs.rust-bin.stable.latest.minimal;
+          rustCi = pkgs.rust-bin.stable.latest.default;
 
           rustDev = pkgs.rust-bin.stable.latest.default.override {
             extensions = [
@@ -61,7 +61,7 @@
             };
 
             ci = mkShellNoHardening {
-              packages = [ rustMinimal ];
+              packages = [ rustCi ];
             };
           };
         };
