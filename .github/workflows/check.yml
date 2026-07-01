@@ -31,6 +31,9 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          cmd-format: ${{ env.NIX_DEV }} {0}
+
 
       - name: Format
         run: nix develop .#ci --command cargo fmt --check
