@@ -16,12 +16,16 @@ type Number = usize;
 
 pub fn run(input: &str) -> Result<Answer<Number>> {
     let points = parse(input)?;
-    let connections = connections_to_make(&points, 1000);
-    let roster = GroupRoster::new(&connections);
-    let group_counts = roster.largest_groups(3);
+    let distances = points_by_smallest_distance(&points);
+
+    let part_1 = {
+        let roster = GroupRoster::new(distances, Connections::Constant(1000));
+        let group_counts = roster.largest_groups(3);
+        group_counts.into_iter().fold(1, usize::strict_mul)
+    };
 
     Ok(Answer {
-        part_1: group_counts.into_iter().fold(1, usize::strict_mul),
+        part_1,
         part_2: None,
     })
 }
@@ -64,31 +68,19 @@ impl Point {
 }
 
 /// Find the `num_of_connections` closest pairs of points.
-fn connections_to_make(points: &[Point], num_of_connections: usize) -> Vec<(Point, Point)> {
+fn points_by_smallest_distance(points: &[Point]) -> BinaryHeap<Reverse<Distance<'_>>> {
     // A *min-heap* that stores Reverse<Distance>: we want the **smallest** distances
-    // Future optimization if needed: don't store all distances, only store num_of_connections distances.
-    // going naive for now and storing all distances, if needed we can optimize
-    let mut heap = BinaryHeap::new();
+    // We're going to hold all combinations of two elements: C(n, 2) = (n * (n-1)) / 2
+    let num_of_points = points.len();
+    let mut distances = Vec::with_capacity((num_of_points * (num_of_points - 1)) / 2);
 
     for (index, p1) in points.iter().enumerate() {
-        for p2 in points.iter().skip(index + 1) {
-            heap.push(Reverse(Distance::new(p1, p2)));
+        for p2 in &points[index + 1..] {
+            distances.push(Reverse(Distance::new(p1, p2)));
         }
     }
 
-    // Now our heap sorts all distances, pop out only the connections needed
-    assert!(heap.len() >= num_of_connections);
-    let mut shortest_connections = Vec::with_capacity(num_of_connections);
-
-    for _ in 0..num_of_connections {
-        shortest_connections.push(
-            heap.pop()
-                .map(|Reverse(Distance { p1, p2, .. })| (p1.clone(), p2.clone()))
-                .expect("We checked heap had at least num_of_connections elements above"),
-        );
-    }
-
-    shortest_connections
+    BinaryHeap::from(distances)
 }
 
 // When ordering, *only* consider distance_squared, not the points themselves
@@ -105,43 +97,71 @@ impl PartialOrd for Distance<'_> {
 }
 
 /// Data structure to hold points together into groups.
-struct GroupRoster(HashMap<Point, GroupId>);
+struct GroupRoster {
+    roster: HashMap<Point, GroupId>,
+}
 
 /// Implementation detail for [`GroupRoster`], identifying a group.
 type GroupId = u16;
 
+/// How many connections to make during the group roster.
+#[derive(Clone, Copy)]
+enum Connections {
+    /// Make a constant number of connections.
+    Constant(usize),
+}
+
 impl GroupRoster {
     /// Construct the roster from a list of points to connect.
-    fn new(connections: &[(Point, Point)]) -> Self {
+    fn new(mut connections: BinaryHeap<Reverse<Distance>>, mode: Connections) -> Self {
         // Maps Point -> GroupId
-        let mut map = HashMap::new();
+        let mut roster = HashMap::new();
         let mut unclaimed_group_id: GroupId = 1;
 
-        for (p1, p2) in connections {
+        let mut connect_points = |p1: &Point, p2| {
             for point in [p1, p2] {
-                if !map.contains_key(point) {
-                    map.insert(point.clone(), unclaimed_group_id);
+                if !roster.contains_key(point) {
+                    roster.insert(point.clone(), unclaimed_group_id);
                     unclaimed_group_id += 1;
                 }
             }
 
-            let p1_group = *map.get(p1).expect("We asserted entry above");
-            let p2_group = *map.get(p2).expect("We asserted entry above");
+            let p1_group = *roster.get(p1).expect("We asserted entry above");
+            let p2_group = *roster.get(p2).expect("We asserted entry above");
+            // If they're in the same group, do nothing
+            if p1_group == p2_group {
+                return;
+            }
 
             // Merge p2's group into p1 by changing all entries pointing to p2 to be p1
-            for group_id in map.values_mut().filter(|group_id| **group_id == p2_group) {
+            for group_id in roster
+                .values_mut()
+                .filter(|group_id| **group_id == p2_group)
+            {
                 *group_id = p1_group;
+            }
+        };
+
+        match mode {
+            Connections::Constant(num_of_pops) => {
+                assert!(num_of_pops <= connections.len());
+                for _ in 0..num_of_pops {
+                    let Reverse(Distance { p1, p2, .. }) =
+                        connections.pop().expect("Asserted enough elements");
+
+                    connect_points(p1, p2);
+                }
             }
         }
 
-        Self(map)
+        Self { roster }
     }
 
     /// Return the size of the `number` largest groups.
     fn largest_groups(&self, number: usize) -> Vec<usize> {
         let mut counts = HashMap::new();
 
-        for group in self.0.values() {
+        for group in self.roster.values() {
             let count = counts.entry(group).or_default();
             *count += 1;
         }
@@ -215,9 +235,9 @@ mod tests {
     fn circuit_sizes() {
         enable_logging();
         let points = parse(EXAMPLE_INPUT).expect("valid parsing");
-        let connections = connections_to_make(&points, 10);
+        let connections = points_by_smallest_distance(&points);
 
-        let roster = GroupRoster::new(&connections);
+        let roster = GroupRoster::new(connections, Connections::Constant(10));
         let group_counts = roster.largest_groups(3);
         assert_eq!(&[5, 4, 2], group_counts.as_slice());
         assert_eq!(40, group_counts.into_iter().fold(1, usize::strict_mul));
@@ -228,64 +248,65 @@ mod tests {
         enable_logging();
         let points = parse(EXAMPLE_INPUT).expect("valid parsing");
         // The text only refers to the first 4 sets
-        let connections = connections_to_make(&points, 4);
+        let mut connections = points_by_smallest_distance(&points);
 
-        assert_eq!(
-            &connections,
-            &[
-                // 1
-                (
-                    Point {
-                        x: 162,
-                        y: 817,
-                        z: 812
-                    },
-                    Point {
-                        x: 425,
-                        y: 690,
-                        z: 689
-                    }
-                ),
-                // 2
-                (
-                    Point {
-                        x: 162,
-                        y: 817,
-                        z: 812
-                    },
-                    Point {
-                        x: 431,
-                        y: 825,
-                        z: 988
-                    }
-                ),
-                // 3
-                (
-                    Point {
-                        x: 906,
-                        y: 360,
-                        z: 560
-                    },
-                    Point {
-                        x: 805,
-                        y: 96,
-                        z: 715
-                    }
-                ),
-                // 4
-                (
-                    Point {
-                        x: 431,
-                        y: 825,
-                        z: 988
-                    },
-                    Point {
-                        x: 425,
-                        y: 690,
-                        z: 689
-                    }
-                ),
-            ]
+        let mut check_point = |expected_p1, expected_p2| {
+            let Reverse(Distance {
+                p1: actual_p1,
+                p2: actual_p2,
+                ..
+            }) = connections.pop().expect("enough elements");
+            assert_eq!(expected_p1, actual_p1, "P1 didn't match");
+            assert_eq!(expected_p2, actual_p2, "P2 didn't match");
+        };
+
+        check_point(
+            &Point {
+                x: 162,
+                y: 817,
+                z: 812,
+            },
+            &Point {
+                x: 425,
+                y: 690,
+                z: 689,
+            },
+        );
+        check_point(
+            &Point {
+                x: 162,
+                y: 817,
+                z: 812,
+            },
+            &Point {
+                x: 431,
+                y: 825,
+                z: 988,
+            },
+        );
+        check_point(
+            &Point {
+                x: 906,
+                y: 360,
+                z: 560,
+            },
+            &Point {
+                x: 805,
+                y: 96,
+                z: 715,
+            },
+        );
+        check_point(
+            &Point {
+                x: 431,
+                y: 825,
+                z: 988,
+            },
+            &Point {
+                x: 425,
+                y: 690,
+                z: 689,
+            },
         );
     }
 
