@@ -19,15 +19,19 @@ pub fn run(input: &str) -> Result<Answer<Number>> {
     let distances = points_by_smallest_distance(&points);
 
     let part_1 = {
-        let roster = GroupRoster::new(distances, &points, Connections::Constant(1000));
+        let roster = GroupRoster::new(distances.clone(), &points, Connections::Constant(1000));
         let group_counts = roster.largest_groups(3);
         group_counts.into_iter().fold(1, usize::strict_mul)
     };
 
-    Ok(Answer {
-        part_1,
-        part_2: None,
-    })
+    let part_2 = Some({
+        let (p1, p2) =
+            GroupRoster::new(distances, &points, Connections::UntilOneGroup).last_points_connected;
+
+        p1.x * p2.x
+    });
+
+    Ok(Answer { part_1, part_2 })
 }
 
 /// A point in 3D space.
@@ -98,7 +102,10 @@ impl PartialOrd for Distance<'_> {
 
 /// Data structure to hold points together into groups.
 struct GroupRoster {
+    /// Map of point to the group it's in.
     roster: HashMap<Point, GroupId>,
+    /// The last two points that were connected.
+    last_points_connected: (Point, Point),
 }
 
 /// Implementation detail for [`GroupRoster`], identifying a group.
@@ -109,6 +116,8 @@ type GroupId = u16;
 enum Connections {
     /// Make a constant number of connections.
     Constant(usize),
+    /// Keep making connections until every point is in the same group.
+    UntilOneGroup,
 }
 
 impl GroupRoster {
@@ -120,8 +129,9 @@ impl GroupRoster {
     ) -> Self {
         // Maps Point -> GroupId
         let mut roster = points.iter().cloned().zip(1..).collect::<HashMap<_, _>>();
+        let mut last_points_connected = None;
 
-        let mut connect_points = |p1, p2| {
+        let mut connect_points = |roster: &mut HashMap<_, _>, p1, p2| {
             let p1_group = *roster
                 .get(p1)
                 .expect("Hashmap was initalized with all points");
@@ -141,6 +151,8 @@ impl GroupRoster {
             {
                 *group_id = p1_group;
             }
+
+            last_points_connected = Some((p1, p2));
         };
 
         match mode {
@@ -150,12 +162,35 @@ impl GroupRoster {
                     let Reverse(Distance { p1, p2, .. }) =
                         connections.pop().expect("Asserted enough elements");
 
-                    connect_points(p1, p2);
+                    connect_points(&mut roster, p1, p2);
+                }
+            }
+            Connections::UntilOneGroup => {
+                loop {
+                    let Reverse(Distance { p1, p2, .. }) =
+                        connections.pop().expect("Asserted enough elements");
+
+                    connect_points(&mut roster, p1, p2);
+
+                    // It's so annoying checking if all array elements are the same in Rust
+                    let first_group_id = *roster.values().next().expect("hashmap is never empty");
+
+                    if roster.values().all(|group_id| group_id == &first_group_id) {
+                        break;
+                    }
                 }
             }
         }
 
-        Self { roster }
+        // a clone/unwrap
+        let last_points_connected = last_points_connected
+            .map(|(p1, p2)| (p1.clone(), p2.clone()))
+            .expect("at least one connection");
+
+        Self {
+            roster,
+            last_points_connected,
+        }
     }
 
     /// Return the size of the `number` largest groups.
@@ -230,6 +265,46 @@ mod tests {
     #[test_case(&Point { x: 52, y: 470, z: 668 }, &Point { x: 117, y: 168, z: 530 },   114_473 ; "simple case 2")]
     fn distance_squared(p1: &Point, p2: &Point, expected_distance: Number) {
         assert_eq!(expected_distance, p1.distance_squared(p2));
+    }
+
+    #[test]
+    fn last_points() {
+        const EXPECTED_POINT_1: Point = Point {
+            x: 216,
+            y: 146,
+            z: 977,
+        };
+        const EXPECTED_POINT_2: Point = Point {
+            x: 117,
+            y: 168,
+            z: 530,
+        };
+
+        enable_logging();
+        let points = parse(EXAMPLE_INPUT).expect("valid parsing");
+        let connections = points_by_smallest_distance(&points);
+
+        let roster = GroupRoster::new(connections, &points, Connections::UntilOneGroup);
+        let last_points = roster.last_points_connected;
+
+        match last_points.0 {
+            EXPECTED_POINT_1 => assert_eq!(
+                last_points.1, EXPECTED_POINT_2,
+                "{EXPECTED_POINT_1:?} matched but {:?} was not {EXPECTED_POINT_2:?}",
+                last_points.1
+            ),
+            EXPECTED_POINT_2 => assert_eq!(
+                last_points.1, EXPECTED_POINT_1,
+                "{EXPECTED_POINT_2:?} matched but {:?} was not {EXPECTED_POINT_1:?}",
+                last_points.1
+            ),
+            _ => panic!(
+                "{:?} was not {EXPECTED_POINT_1:?} or {EXPECTED_POINT_2:?}",
+                last_points.0
+            ),
+        }
+
+        assert_eq!(25_272, last_points.0.x * last_points.1.x);
     }
 
     #[test]
