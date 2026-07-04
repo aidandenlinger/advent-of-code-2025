@@ -19,7 +19,7 @@ pub fn run(input: &str) -> Result<Answer<Number>> {
     let distances = points_by_smallest_distance(&points);
 
     let part_1 = {
-        let roster = GroupRoster::new(distances, Connections::Constant(1000));
+        let roster = GroupRoster::new(distances, &points, Connections::Constant(1000));
         let group_counts = roster.largest_groups(3);
         group_counts.into_iter().fold(1, usize::strict_mul)
     };
@@ -113,21 +113,22 @@ enum Connections {
 
 impl GroupRoster {
     /// Construct the roster from a list of points to connect.
-    fn new(mut connections: BinaryHeap<Reverse<Distance>>, mode: Connections) -> Self {
+    fn new(
+        mut connections: BinaryHeap<Reverse<Distance>>,
+        points: &[Point],
+        mode: Connections,
+    ) -> Self {
         // Maps Point -> GroupId
-        let mut roster = HashMap::new();
-        let mut unclaimed_group_id: GroupId = 1;
+        let mut roster = points.iter().cloned().zip(1..).collect::<HashMap<_, _>>();
 
-        let mut connect_points = |p1: &Point, p2| {
-            for point in [p1, p2] {
-                if !roster.contains_key(point) {
-                    roster.insert(point.clone(), unclaimed_group_id);
-                    unclaimed_group_id += 1;
-                }
-            }
+        let mut connect_points = |p1, p2| {
+            let p1_group = *roster
+                .get(p1)
+                .expect("Hashmap was initalized with all points");
+            let p2_group = *roster
+                .get(p2)
+                .expect("Hashmap was initalized with all points");
 
-            let p1_group = *roster.get(p1).expect("We asserted entry above");
-            let p2_group = *roster.get(p2).expect("We asserted entry above");
             // If they're in the same group, do nothing
             if p1_group == p2_group {
                 return;
@@ -237,7 +238,7 @@ mod tests {
         let points = parse(EXAMPLE_INPUT).expect("valid parsing");
         let connections = points_by_smallest_distance(&points);
 
-        let roster = GroupRoster::new(connections, Connections::Constant(10));
+        let roster = GroupRoster::new(connections, &points, Connections::Constant(10));
         let group_counts = roster.largest_groups(3);
         assert_eq!(&[5, 4, 2], group_counts.as_slice());
         assert_eq!(40, group_counts.into_iter().fold(1, usize::strict_mul));
