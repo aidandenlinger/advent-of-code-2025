@@ -7,7 +7,7 @@ incompatible-publish-age = "deny"
 lockfile-baseline = "floor"
 
 [registry]
-global-min-publish-age = "14 days"
+global-min-publish-age = "3 days"
 
 # Optional allow rules.
 # Add as many `allow.exact` and `allow.package` entries as you need.
