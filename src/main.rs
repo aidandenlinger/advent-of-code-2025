@@ -41,7 +41,7 @@ fn main() -> Result<()> {
 
     let input = read_to_string(&input_file).wrap_err(format!(
         "Couldn't read `{}` to string",
-        &input_file.display()
+        input_file.display()
     ))?;
 
     let answer = match cli.day {

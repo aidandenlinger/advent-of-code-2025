@@ -41,7 +41,7 @@ fn part1_invalid_id(id: u64) -> bool {
     }
 
     let (first_half, second_half) = num_as_string.split_at(num_as_string.len() / 2);
-    debug_assert!(first_half.len() == second_half.len());
+    debug_assert_eq!(first_half.len(), second_half.len());
 
     let is_invalid = first_half == second_half;
 
